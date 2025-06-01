@@ -1,0 +1,61 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PDF files
+*.pdf
+!samples/*.pdf
+
+# Logs
+*.log
+logs/
+pdf_translator.log
+
+# Temporary files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+.ipynb_checkpoints/
+tmp/
+temp/
+
+# Output files
+*_translated.pdf
+output/
+
+# API Keys
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+api_key.txt 
