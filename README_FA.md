@@ -1,4 +1,4 @@
-[English](README.md) / [فارسی](README-FA.md)
+[English](README.md) / [فارسی](README_FA.md)
 
 # مترجم فایل‌های PDF به فارسی
 
