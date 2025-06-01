@@ -1,6 +1,6 @@
 [English](README.md) / [فارسی](README_FA.md)
 
-# مترجم فایل‌های PDF به فارسی
+# مترجم فایل‌های PDF با هوش مصنوعی
 
 این ابزار قدرتمند فایل‌های PDF را از انگلیسی به فارسی ترجمه می‌کند و در عین حال چیدمان اصلی سند را کاملاً حفظ می‌نماید. این پروژه از API جمینی گوگل برای ترجمه با کیفیت بالا استفاده می‌کند و تکنیک‌های پیشرفته‌ای برای مدیریت نمایش متن راست به چپ فارسی پیاده‌سازی کرده است.
 
@@ -32,8 +32,8 @@
 
 1. کلون کردن مخزن:
 ```bash
-git clone https://github.com/yourusername/persian-pdf-translator.git
-cd persian-pdf-translator
+git clone https://github.com/ItsOrv/Ai-PDF-Translate.git
+cd Ai-PDF-Translate
 ```
 
 2. ایجاد و فعال‌سازی محیط مجازی:
