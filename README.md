@@ -1,7 +1,7 @@
 [English](README.md) / [فارسی](README_FA.md)
 
 
-# Persian PDF Translator
+# Ai PDF Translator
 
 A powerful tool that translates PDF documents from English to Persian while preserving the original layout. This project uses Google's Gemini API for high-quality translation and implements advanced techniques for handling right-to-left Persian text rendering.
 
@@ -33,8 +33,8 @@ Use our setup script which handles everything for you:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/persian-pdf-translator.git
-cd persian-pdf-translator
+git clone https://github.com/ItsOrv/Ai-PDF-Translate.git
+cd Ai-PDF-Translate
 ```
 
 2. Create and activate a virtual environment:
