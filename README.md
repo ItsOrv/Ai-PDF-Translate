@@ -1,6 +1,8 @@
 [English](README.md) / [فارسی](README_FA.md)
 
-
+××××
+# I haven’t finished the project yet. I’ll complete it soon when I have a bit more free time.
+××××
 # Ai PDF Translator
 
 A powerful tool that translates PDF documents from English to Persian while preserving the original layout. This project uses Google's Gemini API for high-quality translation and implements advanced techniques for handling right-to-left Persian text rendering.
