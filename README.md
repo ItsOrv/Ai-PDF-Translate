@@ -18,29 +18,6 @@ A powerful tool that translates PDF documents from English to Persian while pres
 - **Error Recovery** - Continues processing even after encountering certain errors
 - **Character-Level Processing** - Handles text accurately at the character level
 
-## Project Structure
-
-```
-Ai-PDF-Translate/
-├── main.py                  # Main entry point
-├── example.py               # Example usage script
-├── src/                     # Source code directory
-│   ├── extractor/           # PDF text extraction module
-│   │   └── pdf_extractor.py
-│   ├── translator/          # Text translation module
-│   │   └── translator.py
-│   ├── generator/           # PDF generation module
-│   │   └── pdf_generator.py
-│   └── utils/               # Utility functions
-│       ├── text_utils.py    # Text processing utilities
-│       └── font_utils.py    # Font handling utilities
-├── tools/                   # Helper tools
-│   ├── download_fonts.py    # Font downloader
-│   └── test_api_key.py      # API key validator
-├── fonts/                   # Persian fonts directory
-└── samples/                 # Sample PDF files
-```
-
 ## Installation
 
 ### Automatic Setup (Recommended)
@@ -135,6 +112,52 @@ python main.py --input large_document.pdf --output translated_large.pdf --batch-
 - `medical` - Healthcare and medical documents
 - `legal` - Contracts and legal documents
 - `technical` - Engineering and technical documentation
+
+## Technical Details
+
+### How It Works
+
+1. **Text Extraction**: The program extracts text elements and their exact positions from the PDF
+2. **Translation**: Text is sent to Google's Gemini API with specialized prompts based on domain
+3. **Layout Reconstruction**: Translated text is placed exactly in the original layout
+4. **Font Management**: Persian fonts are automatically selected and sized to match the original style
+5. **RTL Rendering**: Text is properly rendered with right-to-left alignment and character shaping
+
+### Smart Text Positioning
+
+This program uses several techniques to ensure proper placement of Persian text:
+
+- **Dynamic Line Breaking**: Intelligently breaks text at appropriate boundaries
+- **Adaptive Size Adjustment**: Reduces font size when necessary to fit longer translated text
+- **Margin Protection**: Prevents text from extending beyond page boundaries
+- **Character-Level Processing**: Manages Persian text at the character level for precise line breaks
+
+### API Optimization
+
+- **Rate Limiting**: Respects Google Gemini API limits (15 requests per minute for free tier)
+- **Exponential Backoff**: Smart retries with increasing delays between attempts
+- **Batch Processing**: Processes text in batches to optimize API usage
+- **Random Jitter**: Adds random delays to prevent synchronized retry attempts
+
+## Troubleshooting
+
+### API Issues
+
+- **Rate Limit Errors**: The program automatically manages rate limits, but you can further reduce batch size
+- **API Key Issues**: Ensure your API key is properly set in the `.env` file
+- **Connection Problems**: Check your internet connection and firewall settings
+
+### Translation Quality
+
+- **Poor Translation**: Try a different domain specialization (--domain option)
+- **Terminology Issues**: For scientific/technical documents, use the appropriate domain
+- **Text Problems**: For large documents with cross-references, process in smaller chunks
+
+### PDF Rendering
+
+- **Text Overflow**: The program manages this automatically, but complex layouts might need manual adjustment
+- **Missing Fonts**: Run `python tools/download_fonts.py` to ensure all Persian fonts are installed
+- **Image Quality**: Images are preserved at their original quality
 
 ## Testing Your API Key
 
