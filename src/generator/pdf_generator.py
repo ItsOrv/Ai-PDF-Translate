@@ -1,438 +1,264 @@
 """
-Module for generating a PDF with translated text.
+Module for generating PDFs with translated text.
 """
+
 import os
 import logging
 from typing import List, Dict, Any, Optional
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from PyPDF2 import PdfReader, PdfWriter
-import io
-from decimal import Decimal
 import fitz  # PyMuPDF
-import tempfile
-import shutil
 
-from src.utils.text_utils import prepare_persian_text, is_persian, wrap_text
-from src.utils.font_utils import register_persian_fonts, get_available_persian_fonts, get_text_width
+from src.models.text_element import TextElement
+from src.generator.text_renderer import TextRenderer
+from src.generator.image_handler import ImageHandler
+from src.generator.pdf_cleaner import PDFCleaner
+from src.utils.file_utils import ensure_dir_exists
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
 class PDFGenerator:
-    """Class for generating a PDF with translated text."""
+    """
+    Generates a PDF document with translated text elements.
+    """
     
-    def __init__(self, output_path: str):
+    def __init__(self, font_path: Optional[str] = None):
         """
-        Initialize the PDF generator.
+        Initialize the PDF Generator.
         
         Args:
-            output_path: Path where the output PDF will be saved
+            font_path: Path to font file for text rendering, or None to use default
         """
-        self.output_path = output_path
-        self.default_persian_font = register_persian_fonts()
-        self.available_fonts = get_available_persian_fonts()
-        logger.info(f"Using {self.default_persian_font} as default Persian font")
-        logger.info(f"Available Persian fonts: {', '.join(self.available_fonts)}")
+        self.text_renderer = TextRenderer(font_path)
+        self.temp_dir = "temp"
+        ensure_dir_exists(self.temp_dir)
         
-    def generate_translated_pdf(self, original_pdf_path: str, text_elements: List[Dict[str, Any]]) -> None:
+    def generate_translated_pdf(
+        self, 
+        original_pdf_path: str, 
+        output_pdf_path: str, 
+        translated_elements: List[TextElement]
+    ) -> bool:
         """
         Generate a PDF with translated text.
         
         Args:
             original_pdf_path: Path to the original PDF
-            text_elements: List of dictionaries with text and layout information
+            output_pdf_path: Path where the translated PDF will be saved
+            translated_elements: List of TextElement objects with translated text
+            
+        Returns:
+            True if successful, False otherwise
         """
         try:
-            # Create temporary directory for processing files
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Path for PDF with text removed
-                text_removed_path = os.path.join(temp_dir, "text_removed.pdf")
-                
-                # Remove text from original PDF using PyMuPDF (fitz)
-                self._remove_text_from_pdf(original_pdf_path, text_removed_path)
-                
-                # Create a PDF writer
-                pdf_writer = PdfWriter()
-                
-                # Open the PDF with text removed
-                with open(text_removed_path, 'rb') as file:
-                    pdf_reader = PdfReader(file)
-                    
-                    # Get the number of pages
-                    num_pages = len(pdf_reader.pages)
-                    
-                    # Group text elements by page
-                    elements_by_page = self._group_elements_by_page(text_elements, num_pages)
-                    
-                    # Process each page
-                    for page_num in range(num_pages):
-                        logger.info(f"Processing page {page_num + 1}/{num_pages}")
-                        
-                        # Get the page with text removed
-                        page_without_text = pdf_reader.pages[page_num]
-                        
-                        # Create a canvas for the translated text
-                        buffer = io.BytesIO()
-                        page_width = float(page_without_text.mediabox.width)
-                        page_height = float(page_without_text.mediabox.height)
-                        c = canvas.Canvas(buffer, pagesize=(page_width, page_height))
-                        
-                        # Add translated text to the canvas
-                        elements = elements_by_page.get(page_num, [])
-                        self._add_translated_text_to_canvas(c, elements, page_height)
-                        
-                        # Save the canvas
-                        c.save()
-                        
-                        # Create a PDF from the canvas
-                        buffer.seek(0)
-                        text_pdf = PdfReader(buffer)
-                        
-                        # Merge the page without text and the translated text
-                        page_without_text.merge_page(text_pdf.pages[0])
-                        
-                        # Add the page to the writer
-                        pdf_writer.add_page(page_without_text)
-                    
-                    # Write the output PDF
-                    with open(self.output_path, 'wb') as output_file:
-                        pdf_writer.write(output_file)
-                        
-                logger.info(f"Generated translated PDF: {self.output_path}")
-                
+            logger.info(f"Generating translated PDF from {original_pdf_path} to {output_pdf_path}")
+            
+            # Create a clean PDF without text
+            clean_pdf_path = os.path.join(self.temp_dir, "clean_pdf.pdf")
+            PDFCleaner.remove_text(original_pdf_path, clean_pdf_path)
+            
+            # Get document dimensions from original PDF
+            doc_info = self._get_document_info(original_pdf_path)
+            
+            # Generate PDF pages with translated text only
+            text_pdf_path = os.path.join(self.temp_dir, "text_pdf.pdf")
+            self._generate_text_pdf(text_pdf_path, translated_elements, doc_info)
+            
+            # Merge the clean PDF and text PDF
+            self._merge_pdfs(clean_pdf_path, text_pdf_path, output_pdf_path)
+            
+            # Clean up temporary files
+            self._cleanup_temp_files([clean_pdf_path, text_pdf_path])
+            
+            logger.info(f"Successfully generated translated PDF at {output_pdf_path}")
+            return True
+            
         except Exception as e:
-            logger.error(f"Error generating PDF: {str(e)}")
-            raise
+            logger.error(f"Error generating translated PDF: {str(e)}")
+            return False
     
-    def _remove_text_from_pdf(self, input_path: str, output_path: str) -> None:
+    def _get_document_info(self, pdf_path: str) -> Dict[str, Any]:
         """
-        Remove text from PDF while preserving images and other elements.
+        Get document information including page dimensions.
         
         Args:
-            input_path: Path to the input PDF
-            output_path: Path to save the PDF with text removed
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Dictionary with document information
         """
+        doc_info = {"pages": []}
+        
         try:
-            # Open the PDF
-            pdf_doc = fitz.open(input_path)
+            # Open the PDF document
+            pdf_doc = fitz.open(pdf_path)
             
-            # Create a new PDF document
-            new_pdf = fitz.open()
+            # Get general document information
+            doc_info["page_count"] = len(pdf_doc)
             
-            # Process each page
+            # Get page-specific information
             for page_num in range(len(pdf_doc)):
                 page = pdf_doc[page_num]
-                
-                # Create a new page in the output document with the same dimensions
-                new_page = new_pdf.new_page(width=page.rect.width, height=page.rect.height)
-                
-                # Extract and insert images from the original page to the new page
-                image_list = page.get_images(full=True)
-                
-                for img_index, img_info in enumerate(image_list):
-                    xref = img_info[0]  # xref number of the image
-                    try:
-                        # Extract image
-                        base_image = pdf_doc.extract_image(xref)
-                        image_bytes = base_image["image"]
-                        
-                        # Get image position and size info
-                        bbox = self._get_image_bbox(page, xref)
-                        if bbox:
-                            # Insert image at the same position
-                            new_page.insert_image(bbox, stream=image_bytes)
-                    except Exception as e:
-                        logger.warning(f"Error extracting image {img_index} on page {page_num+1}: {str(e)}")
-                
-                # Extract and copy form XObjects (complex elements like logos, charts, etc.)
-                for xref in page.get_xobjects():
-                    try:
-                        new_page._copy_xobj_contents(page, xref)
-                    except Exception as e:
-                        logger.warning(f"Error copying XObject {xref} on page {page_num+1}: {str(e)}")
-                        
-                # Copy annotations (except text annotations)
-                for annot in page.annots():
-                    if annot.type[0] not in (3, 4, 8, 9, 10, 11, 12, 13, 22):  # Skip text-related annotations
-                        try:
-                            new_page.add_annot(annot.rect, annot.type[0], annot.info)
-                        except Exception as e:
-                            logger.warning(f"Error copying annotation on page {page_num+1}: {str(e)}")
-                
-                # Copy links
-                for link in page.links():
-                    try:
-                        new_page.insert_link(link)
-                    except Exception as e:
-                        logger.warning(f"Error copying link on page {page_num+1}: {str(e)}")
+                page_info = {
+                    "width": page.rect.width,
+                    "height": page.rect.height,
+                    "rotation": page.rotation
+                }
+                doc_info["pages"].append(page_info)
             
-            # Save the new PDF with text removed
-            new_pdf.save(output_path)
-            new_pdf.close()
+            # Close the document
             pdf_doc.close()
             
-            logger.info(f"Text removed from PDF and saved to {output_path}")
-            
         except Exception as e:
-            logger.error(f"Error removing text from PDF: {str(e)}")
-            raise
+            logger.error(f"Error getting document info: {str(e)}")
+            
+        return doc_info
     
-    def _get_image_bbox(self, page, xref):
+    def _generate_text_pdf(self, output_path: str, text_elements: List[TextElement], doc_info: Dict[str, Any]) -> None:
         """
-        Get the bounding box of an image on a page.
+        Generate a PDF with only translated text.
         
         Args:
-            page: PDF page
-            xref: Image reference
-            
-        Returns:
-            Rectangle bounding box or None if not found
+            output_path: Path where the text-only PDF will be saved
+            text_elements: List of TextElement objects with translated text
+            doc_info: Dictionary with document information
         """
-        # Try to find image bbox in the page's display list
         try:
-            dl = page.get_displaylist()
-            rect = None
+            # Group text elements by page
+            elements_by_page = {}
+            for element in text_elements:
+                page_num = element.page_number
+                if page_num not in elements_by_page:
+                    elements_by_page[page_num] = []
+                elements_by_page[page_num].append(element)
             
-            for item in dl:
-                if item[0] == "i" and item[1] == xref:  # This is our image
-                    # Return the rectangle
-                    return fitz.Rect(item[2])
+            # Create a new PDF with ReportLab
+            c = canvas.Canvas(output_path)
             
-            # If we couldn't find the exact reference, estimate based on image size
-            base_image = page.parent.extract_image(xref)
-            width, height = base_image.get("width", 0), base_image.get("height", 0)
-            
-            # Create a rectangle with the image dimensions
-            # This is approximate and may not be correctly positioned
-            return fitz.Rect(0, 0, width, height)
-        except:
-            # Fallback: return the whole page rect
-            return None
-            
-    def _group_elements_by_page(self, elements: List[Dict[str, Any]], num_pages: int) -> Dict[int, List[Dict[str, Any]]]:
-        """
-        Group text elements by page.
-        
-        Args:
-            elements: List of text elements
-            num_pages: Number of pages in the document
-            
-        Returns:
-            Dictionary mapping page numbers to lists of elements
-        """
-        result = {i: [] for i in range(num_pages)}
-        
-        for element in elements:
-            page = element.get('page', 0)
-            if 0 <= page < num_pages:
-                result[page].append(element)
-                
-        return result
-        
-    def _add_translated_text_to_canvas(self, c: canvas.Canvas, elements: List[Dict[str, Any]], page_height: float) -> None:
-        """
-        Add translated text to a canvas.
-        
-        Args:
-            c: ReportLab canvas
-            elements: List of text elements for the page
-            page_height: Height of the page
-        """
-        # Define page margins to prevent text from going outside printable area
-        page_width = float(c._pagesize[0])
-        left_margin = 20
-        right_margin = 20
-        
-        for element in elements:
-            text = element.get('text', '')
-            translated_text = element.get('translated_text', text)
-            
-            # Skip empty text
-            if not translated_text or translated_text.isspace():
-                continue
-                
-            # Get text position and dimensions
-            # Convert all values to float to avoid decimal.Decimal compatibility issues
-            x = float(element.get('x0', 0))
-            # Ensure y1 is properly converted to float
-            y1 = element.get('y1', 0)
-            if isinstance(y1, Decimal):
-                y1 = float(y1)
-                
-            y = page_height - y1  # Convert from PDF coordinates
-            width = float(element.get('width', 0))
-            height = float(element.get('height', 0))
-            font_size = float(element.get('font_size', 12))
-            
-            # Make sure we have a minimum width to work with
-            width = max(width, 100)  # Ensure at least 100 points width
-            
-            # Add a small margin to ensure text doesn't touch the edge
-            margin = 5
-            max_width = width - (2 * margin)
-            
-            # Ensure the text box doesn't extend beyond page boundaries
-            if x < left_margin:
-                width = width - (left_margin - x)
-                x = left_margin
-                max_width = width - (2 * margin)
-            
-            if x + width > page_width - right_margin:
-                width = page_width - right_margin - x
-                max_width = width - (2 * margin)
-            
-            # Determine font style based on original text
-            font_name = self._determine_font_style(element.get('font_name', ''), font_size)
-            
-            # Set font
-            c.setFont(font_name, font_size)
-            
-            # Set text color based on original color if available
-            if 'color' in element:
-                c.setFillColorRGB(*element['color'])
-            
-            # Check if text width exceeds available width
-            text_width = get_text_width(translated_text, font_name, font_size)
-            
-            # Adaptive text sizing - ensure the text fits within bounds
-            if max_width <= 0:
-                max_width = 100  # Fallback to a minimum width
-            
-            # Determine text alignment - default right alignment for Persian
-            text_align = element.get('alignment', 'right' if is_persian(translated_text) else 'left')
-            
-            # If the text is too wide, we have two options:
-            # 1. Wrap the text into multiple lines
-            # 2. Reduce the font size to fit
-            
-            if text_width > max_width:
-                # First try: wrap text into multiple lines
-                lines = wrap_text(translated_text, max_width, font_name, font_size)
-                
-                # If we have too many lines for the available height, reduce font size
-                line_height = font_size * 1.2
-                total_height = len(lines) * line_height
-                
-                if total_height > height and len(lines) > 1:
-                    # Try to find an optimal font size that fits both width and height constraints
-                    adjusted_font_size = self._find_optimal_font_size(
-                        translated_text, max_width, height, font_name, font_size
+            # Process each page
+            for page_num in range(doc_info["page_count"]):
+                if page_num in elements_by_page:
+                    page_info = doc_info["pages"][page_num]
+                    width = page_info["width"]
+                    height = page_info["height"]
+                    
+                    # Set page size to match original
+                    c.setPageSize((width, height))
+                    
+                    # Render text elements for this page
+                    self.text_renderer.add_text_to_canvas(
+                        c, 
+                        elements_by_page[page_num], 
+                        height
                     )
                     
-                    # Set the new font size
-                    if adjusted_font_size != font_size:
-                        font_size = adjusted_font_size
-                        c.setFont(font_name, font_size)
-                        lines = wrap_text(translated_text, max_width, font_name, font_size)
-                        line_height = font_size * 1.2
-                
-                # Draw multiple lines
-                for i, line in enumerate(lines):
-                    # Calculate vertical position for each line
-                    line_y = y - (i * line_height)
-                    
-                    # Skip if line is outside vertical page bounds
-                    if line_y < 0 or line_y > page_height:
-                        continue
-                    
-                    # Prepare Persian text for rendering (reshape and apply bidi)
-                    formatted_line = prepare_persian_text(line)
-                    
-                    # Handle different alignments
-                    if text_align == 'right':
-                        # Right align the text (default for Persian)
-                        text_x = x + width - margin
-                        c.drawRightString(text_x, line_y, formatted_line)
-                    elif text_align == 'center':
-                        # Center align
-                        text_x = x + (width / 2)
-                        c.drawCentredString(text_x, line_y, formatted_line)
-                    else:
-                        # Left align (rare for Persian)
-                        text_x = x + margin
-                        c.drawString(text_x, line_y, formatted_line)
-            else:
-                # Prepare Persian text for rendering
-                formatted_text = prepare_persian_text(translated_text)
-                
-                # Handle different alignments for single-line text
-                if text_align == 'right':
-                    # Right align (default for Persian)
-                    text_x = x + width - margin
-                    c.drawRightString(text_x, y, formatted_text)
-                elif text_align == 'center':
-                    # Center align
-                    text_x = x + (width / 2)
-                    c.drawCentredString(text_x, y, formatted_text)
-                else:
-                    # Left align (rare for Persian)
-                    text_x = x + margin
-                    c.drawString(text_x, y, formatted_text)
+                # Finalize the page
+                c.showPage()
+            
+            # Save the PDF
+            c.save()
+            
+        except Exception as e:
+            logger.error(f"Error generating text PDF: {str(e)}")
+            raise
     
-    def _find_optimal_font_size(self, text: str, max_width: float, max_height: float, 
-                               font_name: str, starting_font_size: float) -> float:
+    def _merge_pdfs(self, clean_pdf_path: str, text_pdf_path: str, output_path: str) -> None:
         """
-        Find the optimal font size to fit text within given width and height constraints.
+        Merge a clean PDF (without text) and a text-only PDF.
         
         Args:
-            text: Text to render
-            max_width: Maximum width
-            max_height: Maximum height
-            font_name: Font name
-            starting_font_size: Initial font size to try
-            
-        Returns:
-            Optimal font size
+            clean_pdf_path: Path to PDF with images and other non-text elements
+            text_pdf_path: Path to PDF with only text elements
+            output_path: Path where the merged PDF will be saved
         """
-        font_size = starting_font_size
-        min_font_size = 6  # Don't go below 6pt for readability
-        
-        while font_size >= min_font_size:
-            # Check if text fits with current font size
-            lines = wrap_text(text, max_width, font_name, font_size)
-            line_height = font_size * 1.2
-            total_height = len(lines) * line_height
+        try:
+            # Open the source PDFs
+            pdf_clean = fitz.open(clean_pdf_path)
+            pdf_text = fitz.open(text_pdf_path)
             
-            # If it fits, we're done
-            if total_height <= max_height:
-                return font_size
+            # Create a new PDF document
+            pdf_result = fitz.open()
+            
+            # Process each page
+            for page_num in range(len(pdf_clean)):
+                # Get pages from both PDFs
+                clean_page = pdf_clean[page_num]
                 
-            # Reduce font size and try again
-            font_size *= 0.9  # Reduce by 10%
+                # Create a new page in the result PDF
+                result_page = pdf_result.new_page(
+                    width=clean_page.rect.width,
+                    height=clean_page.rect.height
+                )
+                
+                # Add content from the clean page (images, etc.)
+                result_page.show_pdf_page(
+                    result_page.rect,
+                    pdf_clean,
+                    page_num
+                )
+                
+                # Add content from the text page if it exists
+                if page_num < len(pdf_text):
+                    result_page.show_pdf_page(
+                        result_page.rect,
+                        pdf_text,
+                        page_num
+                    )
             
-        # Return the minimum font size if we couldn't find a better fit
-        return min_font_size
+            # Save the result
+            pdf_result.save(output_path)
             
-    def _determine_font_style(self, original_font: str, font_size: float) -> str:
+            # Close all documents
+            pdf_clean.close()
+            pdf_text.close()
+            pdf_result.close()
+            
+        except Exception as e:
+            logger.error(f"Error merging PDFs: {str(e)}")
+            raise
+    
+    def _cleanup_temp_files(self, file_paths: List[str]) -> None:
         """
-        Determine the appropriate Persian font style based on the original font.
+        Delete temporary files.
         
         Args:
-            original_font: Original font name
-            font_size: Font size
+            file_paths: List of file paths to delete
+        """
+        for file_path in file_paths:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    logger.warning(f"Error cleaning up temp file {file_path}: {str(e)}")
+                    
+    def add_metadata(self, pdf_path: str, metadata: Dict[str, str]) -> bool:
+        """
+        Add metadata to a PDF file.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            metadata: Dictionary with metadata fields like title, author, subject
             
         Returns:
-            Appropriate Persian font name
+            True if successful, False otherwise
         """
-        # Default font
-        persian_font = self.default_persian_font
-        
-        # Check if we should use a bold variant based on the original font
-        original_lower = original_font.lower()
-        
-        if 'bold' in original_lower or 'black' in original_lower:
-            if 'Vazirmatn-Bold' in self.available_fonts:
-                persian_font = 'Vazirmatn-Bold'
-        elif 'light' in original_lower or 'thin' in original_lower:
-            if 'Vazirmatn-Light' in self.available_fonts:
-                persian_font = 'Vazirmatn-Light'
-        elif font_size > 14:  # Headings are often larger
-            if 'Vazirmatn-Bold' in self.available_fonts:
-                persian_font = 'Vazirmatn-Bold'
-                
-        return persian_font 
+        try:
+            # Open the PDF document
+            pdf_doc = fitz.open(pdf_path)
+            
+            # Set metadata
+            for key, value in metadata.items():
+                if key.lower() in ["title", "author", "subject", "keywords", "creator", "producer"]:
+                    pdf_doc.set_metadata({key: value})
+            
+            # Save with updated metadata
+            pdf_doc.save(pdf_path)
+            pdf_doc.close()
+            
+            logger.info(f"Successfully updated metadata for {pdf_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error adding metadata to PDF: {str(e)}")
+            return False 

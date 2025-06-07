@@ -1,129 +1,200 @@
 """
-Utility functions for font handling, registration, and text measurement.
+Utility functions for font handling and text rendering.
 """
+
 import os
 import logging
-from typing import List, Tuple
-from pathlib import Path
+import tempfile
+import shutil
+from typing import List, Dict, Optional, Tuple
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.lib.fonts import addMapping
 
-from src.utils.text_utils import prepare_persian_text, is_persian
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Default Persian font files
+DEFAULT_PERSIAN_FONTS = {
+    'Vazirmatn': 'Vazirmatn-Regular.ttf',
+    'Vazirmatn-Bold': 'Vazirmatn-Bold.ttf',
+    'Vazirmatn-Light': 'Vazirmatn-Light.ttf',
+    'Sahel': 'Sahel.ttf',
+    'Sahel-Bold': 'Sahel-Bold.ttf',
+    'Tanha': 'Tanha.ttf'
+}
+
 
 def register_persian_fonts() -> str:
     """
     Register Persian fonts for use with ReportLab.
     
     Returns:
-        Name of the default registered font
+        Name of the default Persian font that was registered
     """
-    fonts_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / 'fonts'
-    
-    # Font mappings for registration
-    font_files = {
-        'Vazirmatn': 'Vazirmatn-Regular.ttf',
-        'Vazirmatn-Bold': 'Vazirmatn-Bold.ttf',
-        'Vazirmatn-Light': 'Vazirmatn-Light.ttf',
-        'Sahel': 'Sahel-Regular.ttf',
-        'Samim': 'Samim-Regular.ttf'
-    }
-    
-    # Register available fonts
+    # Default font to use if none of the preferred fonts are available
+    default_font = 'Vazirmatn'
     registered_fonts = []
     
-    for font_name, font_file in font_files.items():
-        font_path = fonts_dir / font_file
-        if font_path.exists():
-            try:
-                pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
-                registered_fonts.append(font_name)
-            except Exception as e:
-                logger.error(f"Error registering font {font_name}: {str(e)}")
-    
-    # If no fonts were registered, use a fallback
-    if not registered_fonts:
-        logger.warning("No Persian fonts were found. Using default font.")
-        return 'Helvetica'
-    
-    # Return the first registered font as default
-    return registered_fonts[0]
+    try:
+        # Look for fonts in common locations
+        font_dirs = [
+            os.path.join(os.path.dirname(__file__), '..', '..', 'fonts'),  # Project fonts directory
+            os.path.join(os.path.expanduser('~'), '.fonts'),  # User fonts directory
+            '/usr/share/fonts/truetype',  # Linux system fonts
+            '/System/Library/Fonts',  # macOS system fonts
+            'C:\\Windows\\Fonts'  # Windows system fonts
+        ]
+        
+        # Try to find and register each font
+        for font_name, font_file in DEFAULT_PERSIAN_FONTS.items():
+            registered = False
+            
+            for font_dir in font_dirs:
+                if not os.path.exists(font_dir):
+                    continue
+                    
+                # Look for the font file
+                font_path = os.path.join(font_dir, font_file)
+                if os.path.exists(font_path):
+                    try:
+                        # Register the font with ReportLab
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        registered_fonts.append(font_name)
+                        registered = True
+                        logger.info(f"Registered font: {font_name} from {font_path}")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to register font {font_name}: {str(e)}")
+            
+            if not registered:
+                logger.warning(f"Could not find font file for {font_name}")
+        
+        # If no fonts were registered, use a fallback approach
+        if not registered_fonts:
+            logger.warning("No Persian fonts found. Attempting to use fallback fonts.")
+            
+            # Try to use Arial or Helvetica as fallback
+            for fallback in ['Arial', 'Helvetica']:
+                try:
+                    # These should be built-in to ReportLab
+                    if fallback not in pdfmetrics.getRegisteredFontNames():
+                        pdfmetrics.registerFont(TTFont(fallback, fallback))
+                    default_font = fallback
+                    logger.info(f"Using {fallback} as fallback font")
+                    break
+                except:
+                    continue
+        else:
+            # Use the first registered font as default
+            default_font = registered_fonts[0]
+            
+        return default_font
+        
+    except Exception as e:
+        logger.error(f"Error registering fonts: {str(e)}")
+        return 'Helvetica'  # Return a safe default
+
 
 def get_available_persian_fonts() -> List[str]:
     """
-    Get a list of available registered Persian fonts.
+    Get a list of available Persian fonts.
     
     Returns:
-        List of available font names
+        List of registered Persian font names
     """
-    fonts_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / 'fonts'
+    registered_fonts = pdfmetrics.getRegisteredFontNames()
     
-    # Font mappings
-    font_files = {
-        'Vazirmatn': 'Vazirmatn-Regular.ttf',
-        'Vazirmatn-Bold': 'Vazirmatn-Bold.ttf',
-        'Vazirmatn-Light': 'Vazirmatn-Light.ttf',
-        'Sahel': 'Sahel-Regular.ttf',
-        'Samim': 'Samim-Regular.ttf'
-    }
+    # Filter for Persian fonts
+    persian_fonts = [
+        font for font in registered_fonts 
+        if font in DEFAULT_PERSIAN_FONTS or 'vazir' in font.lower() or 'sahel' in font.lower()
+    ]
     
-    # Check available fonts
-    available_fonts = []
-    for font_name, font_file in font_files.items():
-        font_path = fonts_dir / font_file
-        if font_path.exists():
-            available_fonts.append(font_name)
-    
-    return available_fonts
+    return persian_fonts
 
-def get_text_dimensions(text: str, font_name: str, font_size: int) -> Tuple[float, float]:
+
+def download_persian_fonts(target_dir: Optional[str] = None) -> bool:
     """
-    Estimate text dimensions for positioning.
+    Download Persian fonts if they are not already available.
     
     Args:
-        text: Text to measure
-        font_name: Font name
-        font_size: Font size
-    
+        target_dir: Directory to save the downloaded fonts
+        
     Returns:
-        Tuple of (width, height) in points
+        True if fonts were downloaded successfully, False otherwise
     """
-    # Simplified estimate - this would need to be refined for production
-    char_width = font_size * 0.6  # Rough estimate
+    import requests
     
-    # For RTL languages, we need to account for different character widths
-    if is_persian(text):
-        char_width = font_size * 0.8  # Persian characters are often wider
+    # Font URLs
+    font_urls = {
+        'Vazirmatn-Regular.ttf': 'https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf',
+        'Vazirmatn-Bold.ttf': 'https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Bold.ttf',
+        'Vazirmatn-Light.ttf': 'https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Light.ttf'
+    }
     
-    width = len(text) * char_width
-    height = font_size * 1.2
+    # Determine target directory
+    if target_dir is None:
+        target_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'fonts')
     
-    return width, height
+    # Create directory if it doesn't exist
+    if not os.path.exists(target_dir):
+        try:
+            os.makedirs(target_dir)
+        except Exception as e:
+            logger.error(f"Failed to create fonts directory: {str(e)}")
+            return False
+    
+    success = True
+    
+    # Download each font
+    for font_file, url in font_urls.items():
+        target_path = os.path.join(target_dir, font_file)
+        
+        # Skip if font already exists
+        if os.path.exists(target_path):
+            logger.info(f"Font already exists: {font_file}")
+            continue
+        
+        try:
+            logger.info(f"Downloading font: {font_file}")
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            
+            with open(target_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            logger.info(f"Downloaded font: {font_file}")
+        except Exception as e:
+            logger.error(f"Failed to download font {font_file}: {str(e)}")
+            success = False
+    
+    return success
+
 
 def get_text_width(text: str, font_name: str, font_size: float) -> float:
     """
-    Get accurate text width using ReportLab's stringWidth function.
+    Calculate the width of text in the given font and size.
     
     Args:
         text: Text to measure
         font_name: Font name
-        font_size: Font size
+        font_size: Font size in points
         
     Returns:
         Width of the text in points
     """
-    # Handle empty text
-    if not text or text.isspace():
-        return 0
+    try:
+        # Get the font
+        face = pdfmetrics.getFont(font_name).face
         
-    # For Persian text, we need to reshape and apply bidi first
-    if is_persian(text):
-        prepared_text = prepare_persian_text(text)
-        return stringWidth(prepared_text, font_name, font_size)
-    else:
-        return stringWidth(text, font_name, font_size) 
+        # Calculate width
+        width = 0
+        for char in text:
+            width += face.getCharWidth(ord(char)) / 1000 * font_size
+            
+        return width
+    except Exception as e:
+        logger.warning(f"Error calculating text width: {str(e)}")
+        # Fallback: estimate based on average character width
+        return len(text) * font_size * 0.6  # Rough estimate 

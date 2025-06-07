@@ -183,4 +183,60 @@ Contributions are welcome! Feel free to submit pull requests or open issues.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Project Structure
+
+The project has been organized into a modular structure for better maintainability and extensibility:
+
+```
+Ai-PDF-Translate/
+├── src/                      # Source code directory
+│   ├── config/               # Configuration management
+│   │   ├── app_config.py     # Application configuration
+│   │   └── constants.py      # Application constants
+│   ├── extractor/            # PDF extraction functionality
+│   │   ├── pdf_extractor.py  # Extracts text and layout from PDFs
+│   │   └── layout_analyzer.py # Analyzes PDF layout
+│   ├── generator/            # PDF generation functionality
+│   │   ├── pdf_generator.py  # Generates translated PDFs
+│   │   ├── pdf_cleaner.py    # Removes text from PDFs
+│   │   ├── text_renderer.py  # Renders text on PDFs
+│   │   └── image_handler.py  # Handles images in PDFs
+│   ├── models/               # Data models
+│   │   └── text_element.py   # Text element model
+│   ├── translator/           # Translation functionality
+│   │   ├── translator.py     # Handles translation using Gemini API
+│   │   ├── prompt_templates.py # Translation prompt templates
+│   │   ├── rate_limiter.py   # API rate limiting
+│   │   └── error_handler.py  # Error handling for translation
+│   └── utils/                # Utility functions
+│       ├── file_utils.py     # File operations utilities
+│       ├── font_utils.py     # Font handling utilities
+│       └── rtl_handler.py    # Right-to-left text handling
+├── example.py                # Example usage script
+├── setup.sh                  # Setup script
+├── requirements.txt          # Python dependencies
+├── .env.example              # Example environment variables
+├── samples/                  # Sample PDF files
+└── fonts/                    # Persian fonts directory
+```
+
+## Development
+
+### Module Overview
+
+- **config**: Manages application configuration and constants
+- **extractor**: Handles extracting text and layout information from PDF files
+- **generator**: Creates translated PDFs with proper layout and formatting
+- **models**: Defines data models used throughout the application
+- **translator**: Manages translation using the Gemini API
+- **utils**: Provides utility functions for file operations, font handling, and RTL text processing
+
+### Extending the Project
+
+To add support for new features:
+
+1. **New Translation Domain**: Add a new template to `src/translator/prompt_templates.py`
+2. **Additional Font Support**: Update `src/utils/font_utils.py`
+3. **New PDF Processing Features**: Extend the relevant modules in `src/generator/` or `src/extractor/`
