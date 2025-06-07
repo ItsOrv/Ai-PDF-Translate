@@ -1,64 +1,132 @@
 #!/bin/bash
-# Setup script for Persian PDF Translator
+# Ai-PDF-Translate Setup Script
+# This script sets up the environment for the PDF translator
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# Print colored text
+print_color() {
+  case $1 in
+    "green") COLOR="\033[0;32m" ;;
+    "red") COLOR="\033[0;31m" ;;
+    "blue") COLOR="\033[0;34m" ;;
+    "yellow") COLOR="\033[0;33m" ;;
+    *) COLOR="\033[0m" ;;
+  esac
+  echo -e "${COLOR}$2\033[0m"
+}
 
-echo -e "${GREEN}===== Persian PDF Translator Setup =====${NC}"
-echo "This script will set up the environment for the Persian PDF Translator."
-
-# Check if Python 3.8+ is installed
-python_version=$(python3 --version 2>&1 | awk '{print $2}')
-if [[ -z "$python_version" ]]; then
-    echo -e "${RED}Error: Python 3 not found. Please install Python 3.8 or higher.${NC}"
+# Check if Python is installed
+check_python() {
+  if command -v python3 &>/dev/null; then
+    print_color "green" "✓ Python 3 is installed"
+    PYTHON_CMD="python3"
+  elif command -v python &>/dev/null; then
+    # Check Python version
+    PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}' | cut -d '.' -f 1)
+    if [ "$PYTHON_VERSION" -ge 3 ]; then
+      print_color "green" "✓ Python 3 is installed"
+      PYTHON_CMD="python"
+    else
+      print_color "red" "✗ Python 3 is required but Python $PYTHON_VERSION is installed"
+      print_color "yellow" "Please install Python 3 and try again"
+      exit 1
+    fi
+  else
+    print_color "red" "✗ Python 3 is not installed"
+    print_color "yellow" "Please install Python 3 and try again"
     exit 1
-fi
-
-echo -e "${GREEN}Found Python $python_version${NC}"
+  fi
+}
 
 # Create virtual environment
-echo -e "\n${YELLOW}Creating virtual environment...${NC}"
-python3 -m venv venv
+create_venv() {
+  print_color "blue" "Creating virtual environment..."
+  $PYTHON_CMD -m venv venv
+  if [ $? -ne 0 ]; then
+    print_color "red" "✗ Failed to create virtual environment"
+    print_color "yellow" "Try installing venv: $PYTHON_CMD -m pip install virtualenv"
+    exit 1
+  fi
+  print_color "green" "✓ Virtual environment created"
+}
 
 # Activate virtual environment
-echo -e "\n${YELLOW}Activating virtual environment...${NC}"
-source venv/bin/activate
+activate_venv() {
+  print_color "blue" "Activating virtual environment..."
+  if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    print_color "green" "✓ Virtual environment activated"
+  elif [ -f "venv/Scripts/activate" ]; then
+    source venv/Scripts/activate
+    print_color "green" "✓ Virtual environment activated"
+  else
+    print_color "red" "✗ Failed to activate virtual environment"
+    exit 1
+  fi
+}
 
 # Install dependencies
-echo -e "\n${YELLOW}Installing dependencies...${NC}"
-pip install --upgrade pip
-pip install -r requirements.txt
+install_dependencies() {
+  print_color "blue" "Installing dependencies..."
+  pip install -r requirements.txt
+  if [ $? -ne 0 ]; then
+    print_color "red" "✗ Failed to install dependencies"
+    exit 1
+  fi
+  print_color "green" "✓ Dependencies installed"
+}
 
 # Download Persian fonts
-echo -e "\n${YELLOW}Downloading Persian fonts...${NC}"
-python download_fonts.py
+download_fonts() {
+  print_color "blue" "Downloading Persian fonts..."
+  python tools/download_fonts.py
+  if [ $? -ne 0 ]; then
+    print_color "red" "✗ Failed to download fonts"
+    print_color "yellow" "You may need to download fonts manually"
+  else
+    print_color "green" "✓ Fonts downloaded"
+  fi
+}
 
-# Create .env file for API key
-if [ ! -f .env ]; then
-    echo -e "\n${YELLOW}Creating .env file for API key...${NC}"
-    echo "GEMINI_API_KEY=" > .env
-    echo -e "${RED}Please edit the .env file and add your Gemini API key.${NC}"
-    echo -e "You can get a Gemini API key from: ${GREEN}https://aistudio.google.com/app/apikey${NC}"
-else
-    echo -e "\n${YELLOW}Found existing .env file.${NC}"
-fi
+# Create .env file if it doesn't exist
+create_env_file() {
+  if [ ! -f ".env" ]; then
+    print_color "blue" "Creating .env file..."
+    cp .env.example .env
+    print_color "yellow" "⚠ Please edit .env file and add your Gemini API key"
+  else
+    print_color "green" "✓ .env file already exists"
+  fi
+}
 
-# Test the API key if it exists
-if grep -q "GEMINI_API_KEY=" .env && ! grep -q "GEMINI_API_KEY=$" .env; then
-    echo -e "\n${YELLOW}Testing API key...${NC}"
-    python test_api_key.py
-else
-    echo -e "\n${YELLOW}No API key found in .env file.${NC}"
-    echo -e "Please add your Gemini API key to the .env file."
-    echo -e "Format: ${GREEN}GEMINI_API_KEY=your_api_key_here${NC}"
-fi
+# Create samples directory if it doesn't exist
+create_samples_dir() {
+  if [ ! -d "samples" ]; then
+    print_color "blue" "Creating samples directory..."
+    mkdir -p samples
+    print_color "green" "✓ Samples directory created"
+    print_color "yellow" "⚠ Please add some PDF files to the samples directory for testing"
+  else
+    print_color "green" "✓ Samples directory already exists"
+  fi
+}
 
-echo -e "\n${GREEN}Setup complete!${NC}"
-echo -e "To use the translator, run: ${GREEN}python main.py --input your_file.pdf --output translated.pdf${NC}"
-echo -e "For more options, run: ${GREEN}python main.py --help${NC}"
-echo
-echo -e "${YELLOW}Don't forget to activate the virtual environment before running:${NC}"
-echo -e "${GREEN}source venv/bin/activate${NC}" 
+# Main setup process
+main() {
+  print_color "blue" "=== Ai-PDF-Translate Setup ==="
+  check_python
+  create_venv
+  activate_venv
+  install_dependencies
+  download_fonts
+  create_env_file
+  create_samples_dir
+  
+  print_color "blue" "=== Setup Complete ==="
+  print_color "green" "You can now use the PDF translator!"
+  print_color "yellow" "Don't forget to add your Gemini API key to the .env file"
+  print_color "yellow" "Run 'python tools/test_api_key.py' to test your API key"
+  print_color "yellow" "Run 'python example.py' to translate a sample PDF"
+}
+
+# Run the setup
+main 

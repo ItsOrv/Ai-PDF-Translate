@@ -22,8 +22,11 @@ def download_file(url, local_path):
 
 def main():
     """Download Persian fonts."""
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+    
     # Create fonts directory if it doesn't exist
-    fonts_dir = Path('fonts')
+    fonts_dir = project_root / 'fonts'
     fonts_dir.mkdir(exist_ok=True)
     
     # Persian fonts to download

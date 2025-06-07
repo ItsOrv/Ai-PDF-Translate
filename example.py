@@ -13,15 +13,25 @@ def main():
     # Define input and output paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Use one of the PDFs in the directory
-    sample_pdfs = [f for f in os.listdir(current_dir) if f.endswith('.pdf')]
-    
-    if not sample_pdfs:
-        print("No PDF files found in the current directory.")
-        return
-    
-    input_path = os.path.join(current_dir, sample_pdfs[0])
-    output_path = os.path.join(current_dir, f"{os.path.splitext(sample_pdfs[0])[0]}_translated.pdf")
+    # Check for PDFs in the samples directory
+    samples_dir = os.path.join(current_dir, 'samples')
+    if os.path.exists(samples_dir) and os.path.isdir(samples_dir):
+        sample_pdfs = [f for f in os.listdir(samples_dir) if f.endswith('.pdf')]
+        if sample_pdfs:
+            input_path = os.path.join(samples_dir, sample_pdfs[0])
+            output_path = os.path.join(current_dir, f"{os.path.splitext(sample_pdfs[0])[0]}_translated.pdf")
+            print(f"Found sample PDF: {sample_pdfs[0]}")
+        else:
+            print("No PDF files found in the samples directory.")
+            return
+    else:
+        # Look for PDFs in the current directory
+        sample_pdfs = [f for f in os.listdir(current_dir) if f.endswith('.pdf')]
+        if not sample_pdfs:
+            print("No PDF files found in the current directory or samples directory.")
+            return
+        input_path = os.path.join(current_dir, sample_pdfs[0])
+        output_path = os.path.join(current_dir, f"{os.path.splitext(sample_pdfs[0])[0]}_translated.pdf")
     
     print(f"Input PDF: {input_path}")
     print(f"Output PDF: {output_path}")

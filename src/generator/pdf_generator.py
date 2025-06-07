@@ -10,11 +10,13 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PyPDF2 import PdfReader, PdfWriter
 import io
-from utils import prepare_persian_text, register_persian_fonts, get_available_persian_fonts, get_text_width, wrap_text, is_persian
 from decimal import Decimal
 import fitz  # PyMuPDF
 import tempfile
 import shutil
+
+from src.utils.text_utils import prepare_persian_text, is_persian, wrap_text
+from src.utils.font_utils import register_persian_fonts, get_available_persian_fonts, get_text_width
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 

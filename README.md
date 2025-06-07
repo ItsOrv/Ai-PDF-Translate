@@ -1,31 +1,51 @@
+# Ai-PDF-Translate
+
 [English](README.md) / [فارسی](README_FA.md)
 
-××××
-# I haven’t finished the project yet. I’ll complete it soon when I have a bit more free time.
-××××
-# Ai PDF Translator
-
-A powerful tool that translates PDF documents from English to Persian while preserving the original layout. This project uses Google's Gemini API for high-quality translation and implements advanced techniques for handling right-to-left Persian text rendering.
+A powerful tool that translates PDF documents from English to Persian while preserving the original layout. Built using Google's Gemini API to deliver high-quality translations, with special attention to the challenges of right-to-left Persian text rendering.
 
 ## Key Features
 
-- **Layout Preservation**: Maintains the original document structure, positioning, and styling
-- **Image & Graphics Retention**: Preserves all images, charts, tables, and non-text elements
-- **RTL Text Handling**: Properly renders right-to-left Persian text with correct alignment
-- **Smart Text Wrapping**: Intelligently wraps Persian text to maintain readability
-- **Adaptive Font Sizing**: Automatically adjusts font sizes to fit text within boundaries
-- **Domain-Specific Translation**: Specialized translation modes for scientific, medical, technical, and legal content
-- **Genetic Domain Support**: Specialized handling of genetics terminology and academic content
-- **API Rate Management**: Smart handling of API limits with automatic retries and exponential backoff
-- **Persian Font Integration**: Built-in support for popular Persian fonts (Vazirmatn, Sahel, Samim)
-- **Error Recovery**: Ability to continue processing after encountering errors
-- **Character-Level Accuracy**: Character-by-character processing for highest accuracy
+- **Layout Preservation** - Maintains the original document structure, including positioning and styling
+- **Image Retention** - Keeps all images, charts, tables and graphics untouched
+- **RTL Text Handling** - Properly renders right-to-left Persian text with correct alignment
+- **Smart Text Wrapping** - Wraps Persian text intelligently for optimal readability
+- **Adaptive Font Sizing** - Automatically adjusts text size to fit within original boundaries
+- **Domain-Specific Translation** - Specialized modes for scientific, medical, technical, and legal documents
+- **Genetics Support** - Special handling of genetic terminology for research papers
+- **API Management** - Handles rate limits with intelligent retries and backoff strategies
+- **Persian Font Support** - Includes popular Persian fonts like Vazirmatn, Sahel, and Samim
+- **Error Recovery** - Continues processing even after encountering certain errors
+- **Character-Level Processing** - Handles text accurately at the character level
+
+## Project Structure
+
+```
+Ai-PDF-Translate/
+├── main.py                  # Main entry point
+├── example.py               # Example usage script
+├── src/                     # Source code directory
+│   ├── extractor/           # PDF text extraction module
+│   │   └── pdf_extractor.py
+│   ├── translator/          # Text translation module
+│   │   └── translator.py
+│   ├── generator/           # PDF generation module
+│   │   └── pdf_generator.py
+│   └── utils/               # Utility functions
+│       ├── text_utils.py    # Text processing utilities
+│       └── font_utils.py    # Font handling utilities
+├── tools/                   # Helper tools
+│   ├── download_fonts.py    # Font downloader
+│   └── test_api_key.py      # API key validator
+├── fonts/                   # Persian fonts directory
+└── samples/                 # Sample PDF files
+```
 
 ## Installation
 
 ### Automatic Setup (Recommended)
 
-Use our setup script which handles everything for you:
+The setup script handles everything for you:
 
 ```bash
 ./setup.sh
@@ -33,7 +53,9 @@ Use our setup script which handles everything for you:
 
 ### Manual Setup
 
-1. Clone the repository:
+If you prefer setting things up manually:
+
+1. Clone the repo:
 ```bash
 git clone https://github.com/ItsOrv/Ai-PDF-Translate.git
 cd Ai-PDF-Translate
@@ -50,21 +72,21 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Download and set up Persian fonts:
+4. Download the Persian fonts:
 ```bash
-python download_fonts.py
+python tools/download_fonts.py
 ```
 
 5. Configure your API key:
    - Copy `.env.example` to `.env`
    - Add your Gemini API key to the `.env` file
-   - Get an API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - Get a key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ## Usage Examples
 
 ### Basic Translation
 
-Translate a PDF with default settings:
+For a quick translation with default settings:
 
 ```bash
 python main.py --input document.pdf --output translated.pdf
@@ -89,7 +111,7 @@ python main.py --input contract.pdf --output translated_contract.pdf --domain le
 
 ### Processing Large Documents
 
-For large documents, you may need to adjust batch size to handle API limits:
+When working with large documents, you might need to adjust the batch size:
 ```bash
 python main.py --input large_document.pdf --output translated_large.pdf --batch-size 2 --continue-on-error
 ```
@@ -107,62 +129,34 @@ python main.py --input large_document.pdf --output translated_large.pdf --batch-
 
 ### Available Translation Domains
 
-- `general`: General purpose translation
-- `scientific`: Scientific and academic content
-- `genetic`: Genetics and genomics terminology
-- `medical`: Medical and healthcare content
-- `legal`: Legal and contractual documents
-- `technical`: Engineering and technical content
+- `general` - Everyday content and general purpose translation
+- `scientific` - Academic papers and scientific content
+- `genetic` - Genetics and genomics research
+- `medical` - Healthcare and medical documents
+- `legal` - Contracts and legal documents
+- `technical` - Engineering and technical documentation
 
-## Technical Details
+## Testing Your API Key
 
-### How It Works
+Check if your Gemini API key is working correctly:
 
-1. **Text Extraction**: The application extracts text elements and their precise positioning from the PDF
-2. **Translation**: Text is sent to Google's Gemini API with specialized prompts based on the domain
-3. **Layout Reconstruction**: Translated text is precisely positioned in the same layout as the original
-4. **Font Handling**: Persian fonts are automatically selected and sized to match the original style
-5. **RTL Rendering**: Text is properly rendered with right-to-left alignment and proper character shaping
+```bash
+python tools/test_api_key.py
+```
 
-### Smart Text Positioning
+## Quick Start
 
-The application employs several techniques to ensure Persian text fits properly:
+Want to see it in action? Try:
 
-- **Dynamic Wrapping**: Intelligently wraps text at appropriate boundaries
-- **Adaptive Sizing**: Reduces font size when necessary to fit longer translated text
-- **Margin Protection**: Prevents text from extending beyond page boundaries
-- **Character-Level Processing**: Handles Persian text at the character level for accurate wrapping
+```bash
+python example.py
+```
 
-### API Optimization
-
-- **Rate Limiting**: Respects Google Gemini API limits (15 requests per minute for free tier)
-- **Exponential Backoff**: Smart retries with increasing delays between attempts
-- **Batch Processing**: Processes text in batches to optimize API usage
-- **Jitter**: Adds randomized delays to prevent synchronized retries
-
-## Troubleshooting
-
-### API Issues
-
-- **Rate Limit Errors**: The application automatically handles rate limits, but you can reduce batch size further
-- **API Key Problems**: Ensure your API key is correctly set in the `.env` file
-- **Connectivity Issues**: Check your internet connection and firewall settings
-
-### Translation Quality
-
-- **Poor Translation**: Try a different domain specialization (--domain option)
-- **Terminology Issues**: For scientific/technical documents, use the appropriate domain
-- **Context Problems**: For large documents with cross-references, process in smaller chunks
-
-### PDF Rendering
-
-- **Text Overflow**: The application handles this automatically, but complex layouts may need manual adjustment
-- **Missing Fonts**: Run `python download_fonts.py` to ensure all Persian fonts are installed
-- **Image Quality**: Images are preserved at their original quality
+This will find a PDF in your `samples` directory (or current directory) and translate it.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Feel free to submit pull requests or open issues.
 
 ## License
 

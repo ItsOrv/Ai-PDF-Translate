@@ -9,7 +9,8 @@ import random
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
-from utils import clean_text_for_translation
+
+from src.utils.text_utils import clean_text_for_translation
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 

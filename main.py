@@ -10,10 +10,11 @@ import argparse
 import logging
 import time
 from typing import List, Dict, Any
-from pdf_extractor import PDFExtractor
-from translator import GeminiTranslator
-from pdf_generator import PDFGenerator
 from dotenv import load_dotenv
+
+from src.extractor.pdf_extractor import PDFExtractor
+from src.translator.translator import GeminiTranslator
+from src.generator.pdf_generator import PDFGenerator
 
 # Configure logging
 logging.basicConfig(

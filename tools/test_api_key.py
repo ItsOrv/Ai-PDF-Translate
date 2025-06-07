@@ -5,10 +5,14 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
-import logging
 
 def test_api_key_direct():
-    """Test API key directly via HTTP request."""
+    """
+    Test API key directly via HTTP request.
+    
+    Returns:
+        bool: True if API key is valid, False otherwise
+    """
     # Load environment variables
     load_dotenv()
     
