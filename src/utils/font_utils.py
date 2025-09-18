@@ -186,15 +186,38 @@ def get_text_width(text: str, font_name: str, font_size: float) -> float:
     """
     try:
         # Get the font
-        face = pdfmetrics.getFont(font_name).face
+        font = pdfmetrics.getFont(font_name)
         
-        # Calculate width
-        width = 0
-        for char in text:
-            width += face.getCharWidth(ord(char)) / 1000 * font_size
+        # Method 1: Try using stringWidth from pdfmetrics (most reliable)
+        try:
+            width = pdfmetrics.stringWidth(text, font_name, font_size)
+            return width
+        except Exception:
+            pass
             
-        return width
+        # Method 2: Try using face.getCharWidth
+        try:
+            face = font.face
+            width = 0
+            for char in text:
+                if hasattr(face, 'getCharWidth'):
+                    width += face.getCharWidth(ord(char)) / 1000 * font_size
+                else:
+                    # Use a fallback if getCharWidth is not available
+                    # This is a common issue with some font types
+                    width += 0.6 * font_size  # Rough estimate for character width
+            return width
+        except Exception:
+            pass
+            
+        # Method 3: Fallback to a rough estimate based on average character width
+        # For Persian text, usually need more space
+        if any(ord(c) > 127 for c in text):  # Non-ASCII characters
+            return len(text) * font_size * 0.7  # Persian/Arabic characters
+        else:
+            return len(text) * font_size * 0.6  # ASCII characters
+            
     except Exception as e:
         logger.warning(f"Error calculating text width: {str(e)}")
-        # Fallback: estimate based on average character width
-        return len(text) * font_size * 0.6  # Rough estimate 
+        # Final fallback
+        return len(text) * font_size * 0.65 

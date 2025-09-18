@@ -40,7 +40,7 @@ class TextRenderer:
             text_elements: List of TextElement objects to render
             page_height: Height of the page in points
         """
-        for element in text_elements:
+        for i, element in enumerate(text_elements):
             # Skip elements without translated text
             if not element.translated_text or element.translated_text.isspace():
                 continue
@@ -51,18 +51,26 @@ class TextRenderer:
             width = element.width
             height = element.height
             
+            # Debug log for text positioning
+            logger.info(f"Rendering text element {i}: pos=({x}, {y}), size=({width}x{height}), text='{element.translated_text[:30]}...'")
+            
             # Determine font and size
             font_name, font_size = self._determine_font(element)
             
             # Set font
             c.setFont(font_name, font_size)
             
-            # Set text color if available
-            if element.color:
-                c.setFillColorRGB(*element.color)
-            
+            # Make sure we have at least a minimum width and height
+            if width < 10:
+                width = 10
+            if height < 10:
+                height = 10
+                
+            # Add some extra margin at the top to avoid text being cut off
+            y = y - 2
+                
             # Render the text
-            self._render_text_block(c, element.translated_text, x, y, width, height, font_name, font_size, element.alignment)
+            self._render_text_block(c, element.translated_text, x, y, width, height, font_name, font_size, None)
     
     def _determine_font(self, element: TextElement) -> Tuple[str, float]:
         """

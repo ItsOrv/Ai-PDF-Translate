@@ -4,7 +4,7 @@ Module for removing text from PDF documents while preserving other elements.
 
 import logging
 import fitz  # PyMuPDF
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -74,22 +74,85 @@ class PDFCleaner:
             new_page: Destination page
         """
         try:
-            image_list = page.get_images(full=True)
+            # Try using page.get_images() to get all images
+            try:
+                image_list = page.get_images(full=True)
+                if not image_list:
+                    logger.info(f"No images found on page {page.number+1} using get_images()")
+            except Exception as e:
+                logger.warning(f"Error getting images from page {page.number+1}: {str(e)}")
+                image_list = []
             
+            # Alternative approach using page.get_drawings() to find images
+            try:
+                drawings = page.get_drawings()
+                drawing_images = []
+                for drawing in drawings:
+                    if drawing["type"] == "image" and "xref" in drawing:
+                        # Check if this xref is already in our image_list
+                        xref_found = False
+                        for img_info in image_list:
+                            if img_info[0] == drawing["xref"]:
+                                xref_found = True
+                                break
+                        
+                        if not xref_found:
+                            drawing_images.append((drawing["xref"], None, None, None, None))
+                
+                # Add any new images found in drawings to our image_list
+                if drawing_images:
+                    logger.info(f"Found {len(drawing_images)} additional images in drawings on page {page.number+1}")
+                    image_list.extend(drawing_images)
+            except Exception as e:
+                logger.warning(f"Error getting drawings from page {page.number+1}: {str(e)}")
+            
+            # Process each image
             for img_index, img_info in enumerate(image_list):
-                xref = img_info[0]  # xref number of the image
                 try:
-                    # Extract image
-                    base_image = page.parent.extract_image(xref)
-                    image_bytes = base_image["image"]
+                    xref = img_info[0]  # xref number of the image
+                    
+                    # Try to extract image
+                    try:
+                        base_image = page.parent.extract_image(xref)
+                        if not base_image:
+                            logger.warning(f"Could not extract image {img_index} (xref: {xref}) on page {page.number+1}")
+                            continue
+                            
+                        image_bytes = base_image.get("image")
+                        if not image_bytes:
+                            logger.warning(f"No image data found for image {img_index} (xref: {xref}) on page {page.number+1}")
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Error extracting image {img_index} (xref: {xref}) on page {page.number+1}: {str(e)}")
+                        continue
                     
                     # Get image position and size info
-                    bbox = PDFCleaner._get_image_bbox(page, xref)
-                    if bbox:
-                        # Insert image at the same position
+                    try:
+                        bbox = PDFCleaner._get_image_bbox(page, xref)
+                        if not bbox:
+                            # If we couldn't determine the bbox from the page, try to create one from the image size
+                            img_width = base_image.get("width", 100)
+                            img_height = base_image.get("height", 100)
+                            
+                            # Create a centered rectangle based on image dimensions
+                            scale_factor = min(page.rect.width / img_width, page.rect.height / img_height) * 0.8
+                            w = img_width * scale_factor
+                            h = img_height * scale_factor
+                            
+                            # Center the image on the page
+                            x0 = (page.rect.width - w) / 2
+                            y0 = (page.rect.height - h) / 2
+                            
+                            bbox = fitz.Rect(x0, y0, x0 + w, y0 + h)
+                            logger.info(f"Created estimated bbox for image {img_index} (xref: {xref}) on page {page.number+1}")
+                        
+                        # Insert image at the position
                         new_page.insert_image(bbox, stream=image_bytes)
+                        logger.info(f"Successfully copied image {img_index} (xref: {xref}) to page {page.number+1}")
+                    except Exception as e:
+                        logger.warning(f"Error inserting image {img_index} (xref: {xref}) on page {page.number+1}: {str(e)}")
                 except Exception as e:
-                    logger.warning(f"Error extracting image {img_index} on page {page.number+1}: {str(e)}")
+                    logger.warning(f"Error processing image {img_index} on page {page.number+1}: {str(e)}")
         except Exception as e:
             logger.warning(f"Error copying images on page {page.number+1}: {str(e)}")
     
@@ -164,16 +227,54 @@ class PDFCleaner:
             Rectangle bounding box or None if not found
         """
         try:
-            # Try to find image bbox in the page's display list
-            dl = page.get_displaylist()
+            # Get the image rectangle from the page directly using safer methods
             rect = None
             
-            for item in dl:
-                if item[0] == "i" and item[1] == xref:  # "i" for image
-                    rect = item[2]  # item[2] is the rectangle
-                    break
+            # Method 1: Try to use get_image_bbox if available
+            try:
+                rect = page.get_image_bbox(xref)
+                if rect:
+                    return rect
+            except (AttributeError, Exception) as e:
+                pass  # Silent fail, try next method
+                
+            # Method 2: Try to use page.get_drawings()
+            try:
+                drawings = page.get_drawings()
+                for drawing in drawings:
+                    if drawing["type"] == "image" and drawing.get("xref") == xref:
+                        return fitz.Rect(drawing["rect"])
+            except Exception:
+                pass  # Silent fail, try next method
+                
+            # Method 3: Attempt to extract image dimensions
+            try:
+                img_info = page.parent.extract_image(xref)
+                if img_info and "width" in img_info and "height" in img_info:
+                    # Default to a centered image that takes up 80% of the page
+                    # while maintaining aspect ratio
+                    img_width = img_info["width"]
+                    img_height = img_info["height"]
                     
-            return rect
+                    scale = min(
+                        page.rect.width / img_width,
+                        page.rect.height / img_height
+                    ) * 0.8
+                    
+                    w = img_width * scale
+                    h = img_height * scale
+                    
+                    # Center on page
+                    x0 = (page.rect.width - w) / 2
+                    y0 = (page.rect.height - h) / 2
+                    
+                    return fitz.Rect(x0, y0, x0 + w, y0 + h)
+            except Exception:
+                pass  # Silent fail
+            
+            # If all methods failed, return None
+            return None
+            
         except Exception as e:
             logger.warning(f"Error getting image bbox on page {page.number+1}: {str(e)}")
             return None 

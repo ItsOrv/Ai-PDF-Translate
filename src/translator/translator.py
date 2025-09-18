@@ -12,7 +12,8 @@ from src.config.constants import Constants
 from src.translator.prompt_templates import PromptTemplates
 from src.translator.rate_limiter import RateLimiter
 from src.translator.error_handler import ErrorHandler, TranslationError
-from src.utils.text_utils import clean_text_for_translation
+from src.models.text_element import TextElement
+from src.utils.rtl_handler import RTLHandler
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class GeminiTranslator:
     def _initialize_api(self) -> None:
         """Initialize the Google Generative AI API with available models."""
         # Get API key from configuration
-        api_key = self.config.api_key
+        api_key = self.config.get_api_key()
         
         if not api_key:
             logger.error("No API key found. Please set GEMINI_API_KEY in .env file")
@@ -66,8 +67,8 @@ class GeminiTranslator:
         genai.configure(api_key=api_key)
         
         # Get model name from configuration
-        model_name = self.config.model
-        fallback_models = self.config.get('fallback_models', [])
+        model_name = self.config.get_model_name()
+        fallback_model = self.config.get_fallback_model()
         
         # Try to load the primary model
         try:
@@ -76,18 +77,13 @@ class GeminiTranslator:
         except Exception as e:
             logger.warning(f"Could not load {model_name} model: {str(e)}")
             
-            # Try fallback models
-            for fallback_model in fallback_models:
-                try:
-                    logger.info(f"Trying {fallback_model} model")
-                    self.model = genai.GenerativeModel(fallback_model)
-                    logger.info(f"Using {fallback_model} model")
-                    break
-                except Exception as e:
-                    logger.warning(f"Could not load {fallback_model} model: {str(e)}")
-            else:
-                # If all models fail, raise exception
-                logger.error("Could not load any model")
+            # Try fallback model
+            try:
+                logger.info(f"Trying fallback model: {fallback_model}")
+                self.model = genai.GenerativeModel(fallback_model)
+                logger.info(f"Using fallback model: {fallback_model}")
+            except Exception as e:
+                logger.error(f"Could not load fallback model: {str(e)}")
                 raise ValueError("Could not load any model")
                 
     def _get_prompt_template(self) -> str:
@@ -113,7 +109,7 @@ class GeminiTranslator:
             return ""
             
         # Clean the text
-        cleaned_text = clean_text_for_translation(text)
+        cleaned_text = RTLHandler.clean_text_for_translation(text)
         if not cleaned_text:
             return ""
             
@@ -203,22 +199,22 @@ class GeminiTranslator:
             
         return results
         
-    def translate_elements(self, elements: List[Dict[str, Any]], 
+    def translate_elements(self, elements: List[TextElement], 
                           batch_size: int = None,
-                          continue_on_error: bool = False) -> List[Dict[str, Any]]:
+                          continue_on_error: bool = False) -> List[TextElement]:
         """
         Translate text elements and update with translations.
         
         Args:
-            elements: List of text element dictionaries
+            elements: List of TextElement objects
             batch_size: Number of elements per batch
             continue_on_error: Whether to continue if errors occur
             
         Returns:
-            List of updated text elements with translations
+            List of updated TextElement objects with translations
         """
         # Extract text from elements
-        texts = [element.get('text', '') for element in elements]
+        texts = [element.text for element in elements]
         
         try:
             # Translate texts
@@ -226,9 +222,7 @@ class GeminiTranslator:
             
             # Update elements with translations
             for element, translated_text in zip(elements, translated_texts):
-                element['translated_text'] = translated_text
-                element['original_text'] = element.get('text', '')
-                element['is_translated'] = bool(translated_text and not translated_text.startswith('[Translation error:'))
+                element.set_translated_text(translated_text)  # Use the correct method
                 
         except Exception as e:
             logger.error(f"Error in batch translation: {str(e)}")
@@ -238,8 +232,7 @@ class GeminiTranslator:
                 
             # If continuing on error, mark all untranslated elements
             for element in elements:
-                if not element.get('translated_text'):
-                    element['translated_text'] = f"[Translation error: {str(e)}]"
-                    element['is_translated'] = False
-                    
+                if not element.translated_text:
+                    element.set_translated_text(f"[Translation error: {str(e)}]")
+        
         return elements 

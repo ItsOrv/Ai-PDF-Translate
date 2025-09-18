@@ -77,7 +77,7 @@ class FileUtils:
         return abs_path
         
     @staticmethod
-    def get_output_path(input_path: str, output_dir: Optional[str] = None, suffix: str = "_translated") -> str:
+    def get_output_path(input_path: str, output_dir: Optional[str] = None, suffix: str = "_translated", prefix: str = "") -> str:
         """
         Generate an output file path based on the input path.
         
@@ -85,6 +85,7 @@ class FileUtils:
             input_path: Path to the input file
             output_dir: Directory for the output file (or None to use input file's directory)
             suffix: Suffix to add to the filename
+            prefix: Prefix to add to the filename
             
         Returns:
             Path to the output file
@@ -101,7 +102,7 @@ class FileUtils:
         FileUtils.ensure_directory_exists(output_dir)
         
         # Create output path
-        output_filename = f"{base_name}{suffix}{ext}"
+        output_filename = f"{prefix}{base_name}{suffix}{ext}"
         output_path = os.path.join(output_dir, output_filename)
         
         return output_path

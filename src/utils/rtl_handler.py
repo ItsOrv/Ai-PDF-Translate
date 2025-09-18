@@ -4,7 +4,7 @@ Utilities for handling Right-to-Left (RTL) text, particularly Persian.
 
 import re
 import logging
-from typing import Optional
+from typing import Optional, List
 import arabic_reshaper
 from bidi.algorithm import get_display
 from langdetect import detect, LangDetectException

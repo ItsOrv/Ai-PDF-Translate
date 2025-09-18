@@ -6,9 +6,11 @@ import os
 import logging
 import fitz  # PyMuPDF
 from typing import List, Dict, Any, Optional, Tuple
+import json
 
-from src.extractor.text_element import TextElement
+from src.models.text_element import TextElement
 from src.extractor.layout_analyzer import LayoutAnalyzer
+from src.utils.file_utils import FileUtils
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -26,69 +28,74 @@ class PDFExtractor:
         Args:
             pdf_path: Path to the PDF file
         """
-        if not os.path.exists(pdf_path):
-            error_msg = f"PDF file not found: {pdf_path}"
-            logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-            
         self.pdf_path = pdf_path
-        logger.info(f"Initialized PDF extractor for {pdf_path}")
         
+        if not os.path.exists(pdf_path):
+            logger.error(f"PDF file not found: {pdf_path}")
+            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+            
+        logger.info(f"Initialized PDF extractor for {pdf_path}")
+    
     def extract_text_with_layout(self) -> List[TextElement]:
         """
-        Extract text along with layout information from the PDF.
+        Extract text with layout information from the PDF.
         
         Returns:
-            List of TextElement objects with text content and layout information
+            List of TextElement objects with position and text information
         """
         try:
             # Open the PDF document
             doc = fitz.open(self.pdf_path)
             logger.info(f"Opened PDF document: {self.pdf_path} with {len(doc)} pages")
             
-            all_words = []
+            # Initialize layout analyzer
+            layout_analyzer = LayoutAnalyzer()
+            
+            # Initialize list for all text elements
+            all_text_elements = []
             
             # Process each page
-            for page_num, page in enumerate(doc):
-                logger.debug(f"Processing page {page_num + 1}/{len(doc)}")
+            for page_num in range(len(doc)):
+                page = doc[page_num]
                 
                 # Extract words with their positions
-                words = page.get_text("words")
-                
-                # Process each word to extract position and text
-                for word in words:
-                    x0, y0, x1, y1, text, block_no, line_no, word_no = word
-                    
-                    # Skip empty words
-                    if not text or text.isspace():
-                        continue
+                words = []
+                for word_info in page.get_text("words"):
+                    # word_info format: (x0, y0, x1, y1, word, block_no, line_no, word_no)
+                    if len(word_info) >= 5:  # Ensure we have at least the word text
+                        x0, y0, x1, y1 = word_info[:4]
+                        text = word_info[4]
                         
-                    # Create a word dictionary with position information
-                    word_dict = {
-                        "text": text,
-                        "page_num": page_num,
-                        "x": x0,
-                        "y": y0,  # Note: PDF coordinates are from bottom
-                        "width": x1 - x0,
-                        "height": y1 - y0
-                    }
-                    
-                    all_words.append(word_dict)
-            
-            # Group words into logical text blocks
-            text_blocks = LayoutAnalyzer.group_words_into_blocks(all_words)
-            
-            # Extract font information for each block
-            text_blocks_with_fonts = self._extract_font_info(text_blocks, doc)
-            
-            # Convert to TextElement objects
-            text_elements = LayoutAnalyzer.convert_blocks_to_text_elements(text_blocks_with_fonts)
+                        word_dict = {
+                            "text": text,
+                            "page_num": page_num,
+                            "x0": x0,
+                            "y0": y0,
+                            "x1": x1,
+                            "y1": y1,
+                            "width": x1 - x0,
+                            "height": y1 - y0
+                        }
+                        
+                        words.append(word_dict)
+                
+                # Group words into logical text blocks for this page
+                text_blocks = layout_analyzer.group_words_into_blocks(words)
+                
+                # Extract font information for each block
+                text_blocks_with_fonts = self._extract_font_info(text_blocks, doc)
+                
+                # Convert to TextElement objects for this page
+                page_text_elements = layout_analyzer.blocks_to_text_elements(text_blocks_with_fonts, page_num)
+                
+                # Add to the overall list
+                all_text_elements.extend(page_text_elements)
             
             # Close the document
             doc.close()
             
-            logger.info(f"Extracted {len(text_elements)} text elements from PDF")
-            return text_elements
+            logger.info(f"Extracted {len(all_text_elements)} text elements from PDF")
+            return all_text_elements
             
         except Exception as e:
             logger.error(f"Error extracting text from PDF: {str(e)}")
@@ -108,8 +115,8 @@ class PDFExtractor:
         # Process each text block
         for block in text_blocks:
             page_num = block["page_num"]
-            x = block["x"]
-            y = block["y"]
+            x = block["x0"]
+            y = block["y0"]
             
             # Get the page
             if page_num < len(doc):
@@ -125,6 +132,8 @@ class PDFExtractor:
                     block["font_size"] = span.get("size", 12.0)
                 else:
                     # Use default values if no spans are found
+                    block["font_name"] = "Helvetica"
+                    block["font_size"] = 12.0
                     logger.debug(f"No font info found for block at ({x}, {y}) on page {page_num+1}")
             
         return text_blocks

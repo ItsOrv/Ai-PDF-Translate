@@ -4,6 +4,7 @@ Module for analyzing PDF layouts and grouping text elements into logical blocks.
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
+import fitz  # PyMuPDF
 
 from src.models.text_element import TextElement
 
@@ -272,7 +273,7 @@ class LayoutAnalyzer:
         elements = []
         
         for block in blocks:
-            # Create TextElement from block
+            # Create TextElement from block with direct position parameters
             element = TextElement(
                 text=block.get('text', ''),
                 page_number=page_number,
@@ -283,9 +284,7 @@ class LayoutAnalyzer:
                 width=block.get('width'),
                 height=block.get('height'),
                 font_name=block.get('font_name'),
-                font_size=block.get('font_size'),
-                color=block.get('color'),
-                alignment=block.get('alignment')
+                font_size=block.get('font_size')
             )
             
             elements.append(element)
